@@ -6,3 +6,5 @@
 1. Write TEV only for vector generation, in C++
 
 ## Issues
+1. icpc test.cpp -mkl
+1. source /usr/usc/intel/default/setup.csh
