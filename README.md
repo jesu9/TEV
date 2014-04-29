@@ -1,9 +1,8 @@
 # Implementation for _Triangulation embedding and democratic aggregation for image search_
 
 ## TODO
-1. Write matlab code to compute covariance matrix, its inverse, and PCA
-1. Need a good K-Means wrapper (maybe in MATLAB also)
-1. Write TEV only for vector generation, in C++
+1. Compare the speed of piping and file IO
+2. Implement batch matrix multiplication
 
 ## Issues
 1. icpc test.cpp -mkl

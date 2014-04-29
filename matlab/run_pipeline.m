@@ -32,6 +32,7 @@ featDim = size(X, 2);
 
 % compute K-Means codebook
 [idx, C] = kmeans(X, numClusters);
+%C = load([saveBase 'kmeans.txt']);
 
 X = X(randsample(size(X, 1), sampledPts), :);    % sample points
 
@@ -54,21 +55,19 @@ R0 = mean(R, 1);
 Sigma = cov(R);
 % compute Sigma^-0.5
 SigmaInv = Sigma^(-0.5);
-SigmaInv = SigmaInv';
 
 % compute Phi
-Phi = (R - repmat(R0, size(R, 1), 1)) * SigmaInv;
+Phi = (R - repmat(R0, size(R, 1), 1)) * SigmaInv';
 % PCA
-% Not neccessary
-Phi0 = mean(Phi, 1);
-Eig = pca(Phi - repmat(Phi0, size(Phi, 1), 1));
+Eig = pca(Phi);
 % Drop first featDim eigenvectors
-Eig = Eig(featDim+1:end, :);
+Eig = Eig(:, featDim+1:end);
+
+% Combine PCA matrix and SigmaInv
+projMat = Eig'*SigmaInv;
 
 save([saveBase 'kmeans.txt'], 'C', '-ascii');
-save([saveBase 'sigmainv.txt'], 'SigmaInv', '-ascii');
+save([saveBase 'proj.txt'], 'projMat', '-ascii');
 save([saveBase 'r0.txt'], 'R0', '-ascii');
-save([saveBase 'phi0.txt'], 'Phi0', '-ascii');
-save([saveBase 'eig.txt'], 'Eig', '-ascii');
 
 end

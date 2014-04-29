@@ -15,13 +15,13 @@ using namespace std;
 
 class TeVector  {
     public:
-        TeVector(string codeBookFile, string sigmaInvFile, string rMeanFile, string pcaFile);
+        TeVector(string codeBookFile, string rMeanFile, string projMatFile);
         ~TeVector();
         bool initTeV(int integralSize = 50, int startFrame = 0, int endFrame = INT_MAX);
         bool addPoint(vector<double> feat, int frameNum);
-        vector<double> &getTeV();
+        vector<double> getTeV();
         vector<vector<double> > getTeV(int stepSize, int windowSize);
-        bool normTeV(vector<double> &v);
+        void normTeV(vector<double> &v);
         bool clearTeV();
 
     private:
@@ -30,9 +30,8 @@ class TeVector  {
         int numClusters;
         int rDim;       // dimension of R
         int tevDim;     // after first featDim components removed
-        double *sigmaInv;
+        double *projMat;
         double *r0;
-        double *eigenVectors;
 
         int intSize;
         int startFrame;
