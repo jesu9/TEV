@@ -63,6 +63,7 @@ int main(int argc, char **argv) {
     fin3.close();
 
     string line;
+    cout<<"Start loading points..."<<endl;
     while (getline(cin, line))  {
         DTFeature feat(line);
         //TODO: Store feature of DT with vector<double>

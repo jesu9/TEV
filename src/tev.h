@@ -25,6 +25,8 @@ class TeVector  {
         bool clearTeV();
 
     private:
+		void aggregate();
+
         vector<vector<double> > codeBook;
         int featDim;
         int numClusters;
@@ -36,6 +38,11 @@ class TeVector  {
         int intSize;
         int startFrame;
         int endFrame;
+
+		int cacheSize;
+		int cachePtr;
+		double *cache;
+		int *ind_cache;
 
         vector<double> tev;
         vector<vector<double> > int_tev;

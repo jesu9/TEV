@@ -31,17 +31,18 @@ TeVector::TeVector(string codeBookFile, string rMeanFile, string projMatFile)  {
     numClusters = codeBook.size();
     rDim = numClusters * featDim;
     tevDim = rDim - featDim;
-    fin.open(projMatFile.c_str());
+    fin.open(projMatFile.c_str(), ios::in|ios::binary);
     projMat = new double[tevDim*rDim];
     i = 0;
-    while (fin>>val)    {
+    fin.read((char*) projMat, tevDim*rDim*sizeof(double));
+    /*while (fin>>val)    {
         projMat[i] = val;
         i++;
     }
     if (i != tevDim*rDim) {
         cout<<"Projection matrix invalid"<<endl;
         exit(0);
-    }
+    }*/
     fin.close();
     fin.open(rMeanFile.c_str());
     i = 0;
@@ -55,6 +56,12 @@ TeVector::TeVector(string codeBookFile, string rMeanFile, string projMatFile)  {
         exit(0);
     }
     fin.close();
+    
+    // manage cache
+    cacheSize = rDim/2;
+    cachePtr = 0;
+    cache = new double[cacheSize*rDim];
+    ind_cache = new int[cacheSize];
 };
 
 TeVector::~TeVector()   {
@@ -62,6 +69,10 @@ TeVector::~TeVector()   {
         delete [] projMat;
     if (r0)
         delete [] r0;
+    if (cache)
+        delete [] cache;
+    if (ind_cache)
+        delete [] ind_cache;
 };
 
 bool TeVector::initTeV(int integralSize, int startFrame, int endFrame)   {
@@ -80,6 +91,9 @@ bool TeVector::initTeV(int integralSize, int startFrame, int endFrame)   {
     tev.resize(tevDim, 0.0);
     vector<double> ltev(tevDim, 0.0);
     int_tev.push_back(ltev);
+
+    cachePtr = 0;
+
     return true;
 };
 
@@ -110,32 +124,52 @@ bool TeVector::addPoint(vector<double> feat, int frameNum)  {
     // minus by R0
     for (int i = 0; i < rDim; i++)
         ltev[i] = ltev[i] - r0[i];
-    // multiply by projection matrix
-    double *c = new double[tevDim];
-    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, tevDim, 1, rDim, 1, projMat, rDim, (double *)&ltev[0], 1, 0, c, 1);
-    ltev.resize(tevDim, 0);
-    for (int i = 0; i < tevDim; i++)
-        ltev[i] = c[i];
-    delete [] c;
-    // normalize with l2 norm
-    double sum = 0.0;
-    for (int i = 0; i < ltev.size(); i++)
-        sum += ltev[i]*ltev[i];
-    sum = sqrt(sum);
-    if (sum > 1e-10)    {
-        for (int i = 0; i < ltev.size(); i++)
-            ltev[i] /= sum;
-    }
-    // compute complete, try average aggregation first
-    for (int i = 0; i < ltev.size(); i++)   {
-        tev[i] += ltev[i];
-        int_tev[intInd][i] += ltev[i];
-    }
+    // add to cache
+    for (int i = 0; i < rDim; i++)
+        cache[cachePtr*rDim+i] = ltev[i];
+    ind_cache[cachePtr] = intInd;
+    cachePtr++;
+    if (cachePtr > cacheSize - 1)
+        aggregate();
     numPts++;
     return true;
 };
 
+void TeVector::aggregate()  {
+    // multiply by projection matrix
+    if (cachePtr < 1)
+        return;
+    int m = cachePtr;
+    int n = tevDim;
+    int k = rDim;
+    double *C = new double[tevDim*cachePtr];
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasTrans, m, n, k, 1, cache, k, projMat, k, 0, C, n);
+    // normalize with l2 norm
+    for (int c = 0; c < cachePtr; c++)  {
+        vector<double> ltev(C+c*tevDim, C+(c+1)*tevDim);
+        int intInd = ind_cache[c];
+        double sum = 0.0;
+        for (int i = 0; i < ltev.size(); i++)
+            sum += ltev[i]*ltev[i];
+        sum = sqrt(sum);
+        if (sum > 1e-10)    {
+            for (int i = 0; i < ltev.size(); i++)
+                ltev[i] /= sum;
+        }
+        // compute complete, try average aggregation first
+        for (int i = 0; i < ltev.size(); i++)   {
+            tev[i] += ltev[i];
+            int_tev[intInd][i] += ltev[i];
+        }
+    }
+    
+    delete [] C;
+    cachePtr = 0;
+};
+
 vector<double> TeVector::getTeV()  {
+    // in case there are points not aggregated yet
+    aggregate();
     if (numPts < 1)
         return tev;
     vector<double> retTeV = tev;
@@ -144,6 +178,8 @@ vector<double> TeVector::getTeV()  {
 };
 
 vector<vector<double> > TeVector::getTeV(int stepSize, int windowSize)    {
+    // in case there are points not aggregated yet
+    aggregate();
     vector<vector<double> > retTeVs;
     if (stepSize % intSize != 0 || windowSize % intSize != 0)   {
         cout<<"Integral window size should be the gcd of step size and window size"<<endl;
@@ -192,6 +228,7 @@ bool TeVector::clearTeV() {
     tev.clear();
     int_tev.clear();
     numPts = 0;
+    cachePtr = 0;
     return true;
 };
 
