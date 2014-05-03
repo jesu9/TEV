@@ -16,58 +16,59 @@ end
 function pipeline(inputFeat, saveBase)
 % K-Means first
 % Then compute R(x)
-% Compute covariance matrix Sigma of R(x)
-% Compute Sigma^(-1/2)
-% Compute PCA using \phi
-
-% Need to store: K-Means, Sigma^(-1/2), PCA
+% Whitening
 
 % Let's set learning parameters here
 numClusters = 64;
-sampledPts = 100000;
+sliceSize = 100000;
 
 X = load(inputFeat);
-
-featDim = size(X, 2);
-
 % compute K-Means codebook
-[idx, C] = kmeans(X, numClusters);
-%C = load([saveBase 'kmeans.txt']);
+[idx, C] = kmeans(X, numClusters, 'MaxIter', 300);
 
-X = X(randsample(size(X, 1), sampledPts), :);    % sample points
+
+X = single(X');     % each column is a data point
+C = single(C');     % each column is a cluster center
+
+featDim = size(X, 1);
+numSamples = size(X, 2);
+rDim = featDim * numClusters;
+
+R0 = zeros(rDim, 1, 'single');
 
 % construct R(x)
-R = repmat(X, 1, numClusters);
-CC = reshape(C', 1, size(R, 2));
-
-R = R - repmat(CC, size(R, 1), 1);
-
-% normalize for each codeword
-for i = 1:numClusters
-    % use nnet toolbox
-    R(:, (i-1)*featDim+1:i*featDim) = normr(R(:, (i-1)*featDim+1:i*featDim));
+Rsum = zeros(rDim, 1);
+for i = 1:sliceSize:numSamples
+    endi = min(i+sliceSize-1, numSamples);
+    R = triemb_res (X(:, i:endi), C, R0);
+    Rsum = Rsum + sum(R, 2);
 end
-
-% compute R0
-R0 = mean(R, 1);
+R0 = Rsum / numSamples;
 
 % compute Sigma
-Sigma = cov(R);
-% compute Sigma^-0.5
-SigmaInv = Sigma^(-0.5);
+% TODO: Need to normalize R first?
+covR = zeros(rDim);
+for i = 1:sliceSize:numSamples
+    endi = min(i+sliceSize-1, numSamples);
+    R = triemb_res (X(:, i:endi), C, R0);
+    covR = covR + R * R';
+end
 
-% compute Phi
-Phi = (R - repmat(R0, size(R, 1), 1)) * SigmaInv';
-% PCA
-Eig = pca(Phi);
-% Drop first featDim eigenvectors
-Eig = Eig(:, featDim+1:end);
+[eigvec, eigval] = eig(covR);
+eigval = diag(eigval);
+[~, idx] = sort(eigval, 'descend');
+% drop featDim first components, also drop last 1000 components
+idx = idx(featDim+1:end-1000);
 
-% Combine PCA matrix and SigmaInv
-projMat = Eig'*SigmaInv;
+projMat = eigvec(:, idx);
+projMat = projMat * (1./sqrt(diag(eigval(idx))));
 
-save([saveBase 'kmeans.txt'], 'C', '-ascii');
-save([saveBase 'proj.txt'], 'projMat', '-ascii');
+% convert back to row based
+C = double(C');
+projMat = double(projMat');
+R0 = double(R0');
+save([saveBase 'codeBook.txt'], 'C', '-ascii');
 save([saveBase 'r0.txt'], 'R0', '-ascii');
+save([saveBase 'projMat.txt'], 'projMat', '-ascii');
 
 end
